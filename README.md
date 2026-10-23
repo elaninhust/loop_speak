@@ -4,7 +4,7 @@
 
 **版本 1.0** · iOS 英语单句无限循环练习
 
-LoopSpeak 是一款面向英语口语跟读的 iPhone 应用：把一句（或一小段）英语存成片段，保存时用火山引擎**豆包语音**合成一次 MP3，之后在本地无限循环播放。界面为中文，基于 **iOS 26 / SwiftUI**，保留 Liquid Glass 控件风格。
+LoopSpeak 是一款面向英语口语跟读的 iPhone 应用：把一句（或一小段）英语存成片段，保存时用火山引擎**豆包语音**合成一次 MP3，之后在本地无限循环播放。基于 **iOS 26 / SwiftUI**，保留 Liquid Glass 控件风格；界面支持**跟随系统 / 简体中文 / English**，与朗读语言相互独立。
 
 缺少豆包凭据、离线合成失败或缓存不可用时，自动回退到 **Apple 系统英语语音**。保存与合成完成后**不会自动播放**，需手动点播放。
 
@@ -16,9 +16,9 @@ LoopSpeak 是一款面向英语口语跟读的 iPhone 应用：把一句（或�
 |:---:|:---:|:---:|
 | ![主界面](docs/screenshots/01-home-empty.png) | ![添加片段](docs/screenshots/02-add-snippet.png) | ![语音设置](docs/screenshots/03-voice-settings.png) |
 
-- **主界面**：标题、设置与添加入口；未配置豆包时提示使用系统语音，并引导添加英语片段。
+- **主界面**：标题、设置与添加入口；列表显示重复遍数与「上次完整播完」相对时间；未配置豆包时提示使用系统语音。
 - **添加片段**：可选标题 + 英语正文；保存后手动播放，当前片段无限循环直至暂停或停止。
-- **语音设置**：API Key / Resource Id、预设或自定义音色；凭据仅存钥匙串，可测试合成与批量重合成。
+- **语音设置**：界面语言、API Key / Resource Id、预设或自定义音色；凭据仅存钥匙串，可测试合成与批量重合成。
 
 ---
 
@@ -27,12 +27,13 @@ LoopSpeak 是一款面向英语口语跟读的 iPhone 应用：把一句（或�
 | 能力 | 说明 |
 |------|------|
 | 片段管理 | 添加 / 编辑 / 删除英语正文与可选标题；SwiftData 本地持久化 |
+| 界面语言 | 设置中切换跟随系统 / 简体中文 / English；即时生效，不改变片段正文或 TTS 朗读语言 |
 | 云端合成 | 豆包 V3 HTTP 单向流式 TTS，合成 MP3（24 kHz）后落盘 |
 | 本地循环 | 同一句无限循环；每完整播完一遍才累加播放次数 |
 | 系统回退 | 无凭据 / 无缓存 / 缓存损坏时使用 AVSpeechSynthesizer |
 | 后台与锁屏 | `UIBackgroundModes = audio`；锁屏与耳机支持播控 |
 | 进度条 | 豆包缓存音频可拖动定位；系统 TTS 不支持 seek |
-| 统计 | 累计播放遍数、最近播放时间；可长按重置 |
+| 统计 | 累计播放遍数、「上次完整播完」相对时间（列表与播放页）；可长按重置 |
 | 凭据安全 | API Key 等仅存 Keychain，不写 UserDefaults / 日志 |
 
 ---
@@ -71,6 +72,7 @@ App Icon 已包含在 `LoopSpeak/Resources/Assets.xcassets/AppIcon.appiconset`�
 
 | 字段 | 说明 |
 |------|------|
+| 界面语言 | 跟随系统 / 简体中文 / English；仅改 UI，片段内容与朗读仍为英语 |
 | API Key | 控制台 API Key |
 | Resource Id | 默认 `seed-tts-2.0`；也可填 `seed-icl-2.0`（需已开通且与音色匹配） |
 | 预设音色 | 默认 **Michael（男）** / `en_male_michael_uranus_bigtts` |
@@ -118,6 +120,7 @@ App Icon 已包含在 `LoopSpeak/Resources/Assets.xcassets/AppIcon.appiconset`�
 - 中途暂停 / 停止 **不计次**；暂停后继续并完整结束计 **1** 次。
 - 系统语音回退同样按完整朗读结束计数。
 - 无播放列表跳转，始终单句循环。
+- 列表与播放页展示「上次完整播完」：从未完整播完则提示尚未完成；七天内用本地化相对时间，更早则相对时间 + 绝对日期时间。
 
 ### 缓存与离线
 
@@ -147,17 +150,20 @@ App Icon 已包含在 `LoopSpeak/Resources/Assets.xcassets/AppIcon.appiconset`�
 loop_speak/
 ├── LoopSpeak.xcodeproj
 ├── LoopSpeak/
-│   ├── App/LoopSpeakApp.swift          # 入口，SwiftData + 播放控制器
+│   ├── App/
+│   │   ├── LoopSpeakApp.swift          # 入口，SwiftData + 播放控制器 + 界面语言
+│   │   └── L10n.swift                  # 中英 UI 文案、语言偏好、延迟本地化消息
 │   ├── Models/Snippet.swift            # 片段模型
 │   ├── TTS/DoubaoTTS.swift             # 配置、Keychain、V3 合成、音频缓存
 │   ├── Playback/
 │   │   ├── SpeechPlaybackController.swift  # 播放、合成协调、锁屏、远程命令
 │   │   └── VoiceSelector.swift             # 系统英语音色优选
 │   ├── Views/
-│   │   ├── SnippetListView.swift       # 列表 + 迷你播放器
+│   │   ├── SnippetListView.swift       # 列表 + 迷你播放器 + 上次完整播完
 │   │   ├── SnippetEditorView.swift     # 添加 / 编辑
 │   │   ├── NowPlayingView.swift        # 播放页 + seek
-│   │   ├── TTSSettingsView.swift       # 凭据与批量合成
+│   │   ├── LastFinishedPlayView.swift  # 上次完整播完相对时间
+│   │   ├── TTSSettingsView.swift       # 界面语言、凭据与批量合成
 │   │   └── GlassPanel.swift            # Liquid Glass 控件
 │   └── Resources/                      # Info.plist、Assets、图标
 ├── docs/screenshots/                   # README 界面预览截图
@@ -167,6 +173,7 @@ loop_speak/
 ### 核心模块职责
 
 - **`Snippet`**：正文、标题、音频相对路径 / 内容哈希、累计次数、最近播放时间；新字段带默认值，兼容旧库轻量迁移。
+- **`L10n` / `AppLanguage`**：界面语言偏好（`UserDefaults` 键 `LoopSpeak.uiLanguage`）；切换即时刷新导航、横幅、错误与锁屏文案；**不**影响片段正文、豆包请求字段或系统英语朗读语言。
 - **`DoubaoTTS`**：独立 `actor` 发 V3 请求；解析单 JSON / NDJSON / 相邻多 JSON；拼接 `code == 0` 的 base64 音频；`code == 20000000` 为流式成功结束码（非失败）。
 - **`SpeechPlaybackController`**：`MainActor` 统一播放与异步合成；完整播放计数；中断永不自动恢复；`PlaybackProgress` 单独观察，避免列表 4Hz 重绘。
 - **`AudioCache`**：哈希与原子写文件；写新文件前先清旧元数据，避免失败时哈希指向新音频。
@@ -216,6 +223,8 @@ python3 Tests/test_tts.py
 - [ ] 删除后磁盘无对应 MP3；无幽灵循环
 - [ ] 暂停 / 继续 / 停止 / 计数 / 重置 / 持久化正确；锁屏与后台可持续循环；AirPods 与远程控制同步
 - [ ] 来电、Siri、耳机断开、切输出后**无自动恢复**
+- [ ] 界面语言：跟随系统 / 中文 / English 即时切换；片段正文与 TTS 仍为英语；错误与横幅随语言刷新
+- [ ] 上次完整播完：未完成 / 七天内相对时间 / 更早相对+绝对时间；重置后回到尚未完整播完
 - [ ] 大字号、深色模式、VoiceOver、玻璃控件与错误提示可用
 
 > 模拟器不能替代真机的后台音频与耳机验收。

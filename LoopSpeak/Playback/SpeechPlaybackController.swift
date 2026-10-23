@@ -22,19 +22,19 @@ final class PlaybackProgress: ObservableObject {
 final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
     @Published private(set) var selectedID: UUID?
     @Published private(set) var selectedSnippet: Snippet?
-    @Published private(set) var title = "尚未选择片段"
+    @Published private(set) var title = L10n.text(.noSelection)
     @Published private(set) var text = ""
     @Published private(set) var isPlaying = false
     @Published private(set) var voiceDescription = ""
     @Published private(set) var needsVoiceDownload = false
-    @Published private(set) var notice: String?
+    @Published private(set) var notice: L10n.Message?
 
     /// Observed only by the now-playing UI; list views must not subscribe to this.
     let progress = PlaybackProgress()
     let settings = TTSSettings()
     private let tts = DoubaoTTS()
     @Published private(set) var synthesizing: Set<UUID> = []
-    @Published private(set) var synthesisErrors: [UUID: String] = [:]
+    @Published private(set) var synthesisErrors: [UUID: L10n.Message] = [:]
     private var generations: [UUID: UUID] = [:]
     private var audioPlayer: AVAudioPlayer?
     private var synthesizer = AVSpeechSynthesizer()
@@ -55,17 +55,24 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
         configureRemoteCommands()
     }
 
+    /// Update presentation metadata without stopping playback or changing its content language.
+    func refreshUILanguage() {
+        if selectedID == nil { title = L10n.text(.noSelection) }
+        refreshVoice()
+        updateNowPlaying()
+    }
+
     func refreshVoice() {
         voice = VoiceSelector.preferredEnglishVoice()
         if let snippet = selectedSnippet,
            AudioCache.existingURL(for: snippet, voice: settings.configuration.voice) != nil {
-            voiceDescription = "豆包 · " + (TTSConfiguration.voices.first { $0.0 == settings.configuration.voice }?.1 ?? settings.configuration.voice)
+            voiceDescription = L10n.text(.doubao) + (TTSConfiguration.voices.first { $0.0 == settings.configuration.voice }?.1 ?? settings.configuration.voice)
             needsVoiceDownload = false
             return
         }
         needsVoiceDownload = voice == nil || voice?.quality == .default
-        let quality = voice?.quality == .premium ? "Premium" : voice?.quality == .enhanced ? "Enhanced" : "标准"
-        voiceDescription = voice.map { "\($0.name) · \(quality) · \($0.language)" } ?? "系统英语语音不可用"
+        let quality = voice?.quality == .premium ? L10n.text(.premium) : voice?.quality == .enhanced ? L10n.text(.enhanced) : L10n.text(.standard)
+        voiceDescription = voice.map { "\($0.name) · \(quality) · \($0.language)" } ?? L10n.text(.noEnglishVoice)
     }
 
     func select(_ snippet: Snippet) {
@@ -84,7 +91,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
         stop()
         selectedSnippet = nil
         selectedID = nil
-        title = "尚未选择片段"
+        title = L10n.text(.noSelection)
         text = ""
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
@@ -118,17 +125,17 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
                 } catch {
                     audioPlayer = nil
                     clearProgress()
-                    notice = "缓存音频无法播放，已使用 Apple 系统语音。"
+                    notice = L10n.Message(.cacheFallback)
                 }
             } else {
-                notice = "本地音频不可用，已使用 Apple 系统语音。"
+                notice = L10n.Message(.localFallback)
             }
             clearProgress()
-            voiceDescription = voice.map { "Apple · \($0.name) · \($0.language)" } ?? "系统英语语音不可用"
+            voiceDescription = voice.map { "Apple · \($0.name) · \($0.language)" } ?? L10n.text(.noEnglishVoice)
             needsVoiceDownload = voice == nil || voice?.quality == .default
             guard voice != nil else {
                 isPlaying = false
-                notice = "未找到英语语音，请先在系统设置下载。"
+                notice = L10n.Message(.missingEnglishVoice)
                 deactivateSession()
                 updateNowPlaying()
                 return
@@ -142,7 +149,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
         } catch {
             isPlaying = false
             clearProgress()
-            notice = "无法启动音频：\(error.localizedDescription)"
+            notice = L10n.Message(.audioStartError, String(error.localizedDescription))
             updateNowPlaying()
         }
     }
@@ -280,7 +287,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
                 // Restore only these statistics; do not roll back unrelated model edits.
                 snippet.playCount = previousCount
                 snippet.lastPlayedAt = previousDate
-                notice = "播放次数保存失败：\(error.localizedDescription)"
+                notice = L10n.Message(.countSaveError, String(error.localizedDescription))
             }
         }
     }
@@ -291,7 +298,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
             guard let self, let current = self.audioPlayer, ObjectIdentifier(current) == identity else { return }
             guard flag else {
                 self.stop()
-                self.notice = "音频播放失败，请重新合成。"
+                self.notice = L10n.Message(.audioFailed)
                 return
             }
             self.recordCompletion()
@@ -300,7 +307,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
                 self.progress.currentTime = 0
                 if !current.play() {
                     self.stop()
-                    self.notice = "无法继续播放，请点击播放重试。"
+                    self.notice = L10n.Message(.resumeFailed)
                 } else {
                     self.startProgressTimer()
                     self.updateNowPlaying()
@@ -314,7 +321,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
         Task { @MainActor [weak self] in
             guard let self, let current = self.audioPlayer, ObjectIdentifier(current) == identity else { return }
             self.stop()
-            self.notice = "缓存音频解码失败，请重新合成。"
+            self.notice = L10n.Message(.decodeFailed)
         }
     }
 
@@ -359,7 +366,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
             refreshVoice()
         } catch {
             if generations[id] == generation {
-                synthesisErrors[id] = "合成失败，可使用系统语音。\(error is TTSError ? error.localizedDescription : "请稍后重试。")"
+                synthesisErrors[id] = L10n.Message(.synthesisError, detail: error is TTSError ? L10n.Message(error: error) : L10n.Message(.retry))
             }
         }
     }
@@ -380,7 +387,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    private func safetyPause(_ message: String) {
+    private func safetyPause(_ message: L10n.Message) {
         guard isPlaying || synthesizer.isPaused || audioPlayer != nil else { return }
         stop()
         notice = message
@@ -392,7 +399,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
             let type = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
             Task { @MainActor [weak self] in
                 if type == AVAudioSession.InterruptionType.began.rawValue {
-                    self?.safetyPause("音频已中断，点击播放从本句开头继续。")
+                    self?.safetyPause(L10n.Message(.interrupted))
                 }
                 // Never honor shouldResume automatically.
             }
@@ -402,13 +409,13 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
             // Our own setCategory call also emits a notification; it is not a route loss.
             guard reason != AVAudioSession.RouteChangeReason.categoryChange.rawValue else { return }
             Task { @MainActor [weak self] in
-                self?.safetyPause("音频输出已改变，确认耳机后点击播放。")
+                self?.safetyPause(L10n.Message(.routeChanged))
             }
         })
         observations.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.stop()
-                self?.notice = "音频服务已重置，请点击播放。"
+                self?.notice = L10n.Message(.servicesReset)
             }
         })
     }
@@ -447,7 +454,7 @@ final class SpeechPlaybackController: NSObject, ObservableObject, AVSpeechSynthe
         guard selectedID != nil else { return }
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
-            MPMediaItemPropertyArtist: "LoopSpeak · 单句无限循环 ∞",
+            MPMediaItemPropertyArtist: L10n.text(.remoteArtist),
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
         ]

@@ -11,7 +11,7 @@ struct TTSConfiguration: Codable, Sendable {
     var needsAPIKeyMigration = false
     var isReady: Bool { !apiKey.isEmpty && !resourceId.isEmpty && !voice.isEmpty }
 
-    static let voices = [("en_male_michael_uranus_bigtts", "Michael（男）")]
+    static var voices: [(String, String)] { [("en_male_michael_uranus_bigtts", L10n.text(.michael))] }
 
     init() {}
     private enum CodingKeys: String, CodingKey { case apiKey, resourceId, voice, accessToken, needsAPIKeyMigration }
@@ -43,15 +43,15 @@ enum TTSError: LocalizedError {
     case response, emptyAudio, missingKey, missingResource, missingVoice
     var errorDescription: String? {
         switch self {
-        case .keychain(let status): return "钥匙串读写失败（\(status)）"
-        case .network(let code): return "语音请求网络失败（\(code)），请检查网络连接。"
-        case .http(let status): return "语音服务 HTTP 错误（\(status)），请检查 API Key、资源授权及服务状态。"
-        case .server(let code, let message): return "语音服务 V3 错误（\(code)）：\(message)"
-        case .response: return "语音服务返回格式无效，或音频无法解码、播放。"
-        case .emptyAudio: return "语音服务未返回音频，请检查音色授权、文本及额度。"
-        case .missingKey: return "请填写控制台 API Key。"
-        case .missingResource: return "请填写 Resource Id，例如 seed-tts-2.0。"
-        case .missingVoice: return "请填写控制台音色库中的 speaker 音色 ID。"
+        case .keychain(let status): return L10n.text(.keychainError, String(status))
+        case .network(let code): return L10n.text(.networkError, String(code))
+        case .http(let status): return L10n.text(.httpError, String(status))
+        case .server(let code, let message): return L10n.text(.serverError, String(code), String(message))
+        case .response: return L10n.text(.invalidResponse)
+        case .emptyAudio: return L10n.text(.emptyAudio)
+        case .missingKey: return L10n.text(.missingKey)
+        case .missingResource: return L10n.text(.missingResource)
+        case .missingVoice: return L10n.text(.missingVoice)
         }
     }
 }
@@ -59,7 +59,7 @@ enum TTSError: LocalizedError {
 @MainActor
 final class TTSSettings: ObservableObject {
     @Published private(set) var configuration = TTSConfiguration()
-    @Published private(set) var error: String?
+    @Published private(set) var error: L10n.Message?
     private let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: "com.loopspeak.doubao",
@@ -74,9 +74,9 @@ final class TTSSettings: ObservableObject {
         let status = SecItemCopyMatching(lookup as CFDictionary, &result)
         if status == errSecSuccess, let data = result as? Data {
             do { configuration = try JSONDecoder().decode(TTSConfiguration.self, from: data) }
-            catch { self.error = "无法读取语音配置，请重新保存。" }
+            catch { self.error = L10n.Message(.configurationError) }
         } else if status != errSecItemNotFound {
-            error = TTSError.keychain(status).localizedDescription
+            error = L10n.Message(error: TTSError.keychain(status))
         }
     }
 
@@ -159,8 +159,8 @@ actor DoubaoTTS {
                 }
                 if let code = reply.code, code != 0 {
                     // A server may echo credentials; redact before presenting any message.
-                    let message = (reply.message ?? "服务未提供错误详情")
-                        .replacingOccurrences(of: apiKey, with: "[已隐藏]")
+                    let message = (reply.message ?? L10n.text(.noErrorDetails))
+                        .replacingOccurrences(of: apiKey, with: L10n.text(.redacted))
                     throw TTSError.server(code, message)
                 }
                 if let encoded = reply.data, !encoded.isEmpty {

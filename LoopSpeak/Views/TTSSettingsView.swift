@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct TTSSettingsView: View {
+    @EnvironmentObject private var language: AppLanguage
     private static let customTag = "__custom__"
 
     @EnvironmentObject private var playback: SpeechPlaybackController
@@ -11,30 +12,40 @@ struct TTSSettingsView: View {
     @State private var presetVoice = "en_male_michael_uranus_bigtts"
     @State private var customVoice = ""
     @State private var busy = false
-    @State private var status: String?
+    @State private var status: L10n.Message?
     @State private var progress = 0
 
     var body: some View {
+        let _ = language.selection
         NavigationStack {
             Form {
-                Section("凭据") {
-                    SecureField("API Key", text: $draft.apiKey)
-                    TextField("Resource Id", text: $draft.resourceId)
-                    Text("凭据仅存储在钥匙串。Resource Id 默认 seed-tts-2.0，也可填写 seed-icl-2.0，需与音色及授权匹配。")
+                Section(L10n.text(.language)) {
+                    Picker(L10n.text(.language), selection: $language.selection) {
+                        Text(L10n.text(.system)).tag(UILanguage.system)
+                        Text("简体中文").tag(UILanguage.chinese)
+                        Text("English").tag(UILanguage.english)
+                    }
+                    Text(L10n.text(.languageHint))
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Section(L10n.text(.credentials)) {
+                    SecureField(L10n.text(.apiKey), text: $draft.apiKey)
+                    TextField(L10n.text(.resourceId), text: $draft.resourceId)
+                    Text(L10n.text(.credentialsHint))
                         .font(.footnote).foregroundStyle(.secondary)
                     if draft.needsAPIKeyMigration {
-                        Text("请改用控制台 API Key").foregroundStyle(.orange)
+                        Text(L10n.text(.migration)).foregroundStyle(.orange)
                     }
                 }
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
 
                 Section {
-                    Picker("预设音色", selection: $presetVoice) {
+                    Picker(L10n.text(.presetVoice), selection: $presetVoice) {
                         ForEach(TTSConfiguration.voices, id: \.0) { voice in
                             Text(voice.1).tag(voice.0)
                         }
-                        Text("自定义").tag(Self.customTag)
+                        Text(L10n.text(.custom)).tag(Self.customTag)
                     }
                     .onChange(of: presetVoice) { _, newValue in
                         if newValue != Self.customTag {
@@ -42,7 +53,7 @@ struct TTSSettingsView: View {
                         }
                     }
 
-                    TextField("自定义音色 ID", text: $customVoice)
+                    TextField(L10n.text(.customVoice), text: $customVoice)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .onChange(of: customVoice) { _, newValue in
@@ -52,47 +63,47 @@ struct TTSSettingsView: View {
                             }
                         }
 
-                    Text("选「自定义」并填写音色库里的 speaker ID；点「保存设置」或「完成」都会写入钥匙串。")
+                    Text(L10n.text(.customHint))
                         .font(.footnote).foregroundStyle(.secondary)
                 } header: {
-                    Text("音色")
+                    Text(L10n.text(.voice))
                 } footer: {
-                    Text("新版控制台只需 API Key；Secret Key / AppID 不用于本接口。音色例如 en_male_michael_uranus_bigtts。合成一次后本地循环不计费。")
+                    Text(L10n.text(.voiceHint))
                 }
 
                 Section {
-                    Button("保存设置") { apply(resynthesize: false) }
-                    Button("重新合成全部片段") { apply(resynthesize: true) }
-                    Button("测试：合成一句英语") {
+                    Button(L10n.text(.saveSettings)) { apply(resynthesize: false) }
+                    Button(L10n.text(.resynthesize)) { apply(resynthesize: true) }
+                    Button(L10n.text(.testVoice)) {
                         busy = true
-                        status = "正在合成测试语音…"
+                        status = L10n.Message(.testing)
                         Task { @MainActor in
                             defer { busy = false }
                             do {
                                 let configuration = try resolvedConfiguration()
                                 let data = try await playback.testVoice(configuration: configuration)
-                                status = "测试合成成功（\(data.count) 字节 MP3）。当前音色：\(configuration.voice)"
-                            } catch { status = error.localizedDescription }
+                                status = L10n.Message(.testSuccess, String(data.count), String(configuration.voice))
+                            } catch { status = L10n.Message(error: error) }
                         }
                     }
-                    Text("保存声音变化后会自动合成全部片段；相同正文和声音已有缓存则跳过。强制重新合成会消耗额度。保存、合成均不会自动播放。")
+                    Text(L10n.text(.synthesisHint))
                         .font(.footnote).foregroundStyle(.secondary)
                 }.disabled(busy)
 
-                if busy { Section { ProgressView("处理中 \(progress)/\(snippets.count)") } }
-                if let status { Section { Text(status).textSelection(.enabled) } }
+                if busy { Section { ProgressView(L10n.text(.processing, String(progress), String(snippets.count))) } }
+                if let status { Section { Text(status.string).textSelection(.enabled) } }
                 if !playback.settings.configuration.isReady {
                     Section {
-                        Label("尚未配置凭据，将使用 Apple 系统语音。", systemImage: "exclamationmark.triangle")
+                        Label(L10n.text(.fallbackBanner), systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
                     }
                 }
             }
             .disabled(busy)
-            .navigationTitle("语音设置")
+            .navigationTitle(L10n.text(.speechSettings))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                    Button(L10n.text(.done)) {
                         // Always persist before dismiss so custom voice is not lost.
                         if busy { return }
                         apply(resynthesize: false, dismissAfterSave: true)
@@ -141,7 +152,7 @@ struct TTSSettingsView: View {
         do {
             configuration = try resolvedConfiguration()
         } catch {
-            status = error.localizedDescription
+            status = L10n.Message(error: error)
             return
         }
         draft = configuration
@@ -155,7 +166,7 @@ struct TTSSettingsView: View {
             customVoice = draft.voice
         }
         do { try playback.settings.save(draft) }
-        catch { status = error.localizedDescription; return }
+        catch { status = L10n.Message(error: error); return }
 
         let changed = previous.voice != draft.voice
             || previous.apiKey != draft.apiKey
@@ -164,12 +175,12 @@ struct TTSSettingsView: View {
         playback.refreshVoice()
 
         guard draft.isReady else {
-            status = "设置已保存，将使用 Apple 系统语音。"
+            status = L10n.Message(.savedFallback)
             if dismissAfterSave { dismiss() }
             return
         }
         guard changed || resynthesize else {
-            status = "设置已保存。当前音色：\(draft.voice)"
+            status = L10n.Message(.savedVoice, String(draft.voice))
             if dismissAfterSave { dismiss() }
             return
         }
@@ -179,7 +190,7 @@ struct TTSSettingsView: View {
             // For 完成: save then dismiss; trigger resynth in background after dismiss via playback.
             busy = true
             progress = 0
-            status = "正在按新音色合成，请稍候…"
+            status = L10n.Message(.newVoiceSynthesis)
             let items = snippets
             Task { @MainActor in
                 for snippet in items {
@@ -188,8 +199,8 @@ struct TTSSettingsView: View {
                 }
                 let failures = items.filter { playback.synthesisErrors[$0.id] != nil }.count
                 status = failures == 0
-                    ? "设置已保存，音色：\(draft.voice)。合成完成。"
-                    : "设置已保存，音色：\(draft.voice)。其中 \(failures) 条合成失败。"
+                    ? L10n.Message(.savedSynthesis, String(draft.voice))
+                    : L10n.Message(.savedFailures, String(draft.voice), String(failures))
                 busy = false
                 dismiss()
             }
@@ -198,7 +209,7 @@ struct TTSSettingsView: View {
 
         busy = true
         progress = 0
-        status = "正在合成，请保持此页面打开。"
+        status = L10n.Message(.keepOpen)
         let items = snippets
         Task { @MainActor in
             for snippet in items {
@@ -207,8 +218,8 @@ struct TTSSettingsView: View {
             }
             let failures = items.filter { playback.synthesisErrors[$0.id] != nil }.count
             status = failures == 0
-                ? "合成完成，音色：\(draft.voice)。点击片段播放。"
-                : "合成完成，其中 \(failures) 条失败，可使用系统语音或重试。"
+                ? L10n.Message(.synthesisComplete, String(draft.voice))
+                : L10n.Message(.synthesisFailures, String(failures))
             busy = false
         }
     }

@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct SnippetListView: View {
+    @EnvironmentObject private var language: AppLanguage
     @Environment(\.modelContext) private var context
     @EnvironmentObject private var playback: SpeechPlaybackController
     @Query(sort: \Snippet.updatedAt, order: .reverse) private var snippets: [Snippet]
@@ -9,19 +10,20 @@ struct SnippetListView: View {
     @State private var adding = false
     @State private var editing: Snippet?
     @State private var showingPlayer = false
-    @State private var storageError: String?
+    @State private var storageError: L10n.Message?
     @State private var resetting: Snippet?
 
     var body: some View {
+        let _ = language.selection
         NavigationStack {
             listContent
                 .navigationTitle("LoopSpeak")
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("设置", systemImage: "gearshape") { showingSettings = true }
+                        Button(L10n.text(.settings), systemImage: "gearshape") { showingSettings = true }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("添加片段", systemImage: "plus") { adding = true }
+                        Button(L10n.text(.addSnippet), systemImage: "plus") { adding = true }
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
@@ -31,21 +33,21 @@ struct SnippetListView: View {
                 .sheet(isPresented: $adding) { SnippetEditorView() }
                 .sheet(item: $editing) { SnippetEditorView(snippet: $0) }
                 .navigationDestination(isPresented: $showingPlayer) { NowPlayingView() }
-                .confirmationDialog("重置播放次数？", isPresented: Binding(
+                .confirmationDialog(L10n.text(.resetQuestion), isPresented: Binding(
                     get: { resetting != nil },
                     set: { if !$0 { resetting = nil } }
                 ), titleVisibility: .visible, presenting: resetting) { snippet in
-                    Button("重置为 0", role: .destructive) {
+                    Button(L10n.text(.resetZero), role: .destructive) {
                         resetCount(for: snippet)
                         resetting = nil
                     }
-                    Button("取消", role: .cancel) { resetting = nil }
+                    Button(L10n.text(.cancel), role: .cancel) { resetting = nil }
                 } message: { _ in
-                    Text("将清除该片段的累计播放次数及最近播放时间。正在进行的朗读完整结束后仍会计数。")
+                    Text(L10n.text(.resetExplanation))
                 }
-                .alert("无法保存", isPresented: Binding(get: { storageError != nil }, set: { if !$0 { storageError = nil } })) {
-                    Button("好") { storageError = nil }
-                } message: { Text(storageError ?? "") }
+                .alert(L10n.text(.cannotSave), isPresented: Binding(get: { storageError != nil }, set: { if !$0 { storageError = nil } })) {
+                    Button(L10n.text(.ok)) { storageError = nil }
+                } message: { Text(storageError?.string ?? "") }
         }
     }
 
@@ -53,12 +55,12 @@ struct SnippetListView: View {
     private var listContent: some View {
         List {
             if !playback.settings.configuration.isReady {
-                Label("未配置豆包凭据，使用 Apple 系统语音。请在设置中配置。", systemImage: "exclamationmark.triangle")
+                Label(L10n.text(.credentialsBanner), systemImage: "exclamationmark.triangle")
                     .font(.footnote).foregroundStyle(.orange)
             }
-            if let error = playback.settings.error { Text(error).foregroundStyle(.orange) }
+            if let error = playback.settings.error { Text(error.string).foregroundStyle(.orange) }
             if snippets.isEmpty {
-                ContentUnavailableView("开始英语循环练习", systemImage: "text.bubble", description: Text("点击右上角 + 添加英语片段，保存后点击播放。"))
+                ContentUnavailableView(L10n.text(.emptyTitle), systemImage: "text.bubble", description: Text(L10n.text(.emptyDescription)))
             }
             ForEach(Array(snippets.enumerated()), id: \.element.id) { index, snippet in
                 SnippetRow(
@@ -66,9 +68,10 @@ struct SnippetListView: View {
                     title: snippet.title,
                     text: snippet.text,
                     playCount: snippet.playCount,
+                    lastPlayedAt: snippet.lastPlayedAt,
                     isSelected: playback.selectedID == snippet.id,
                     isSynthesizing: playback.synthesizing.contains(snippet.id),
-                    synthesisError: playback.synthesisErrors[snippet.id]
+                    synthesisError: playback.synthesisErrors[snippet.id]?.string
                 )
                 .equatable()
                 .contentShape(Rectangle())
@@ -77,16 +80,20 @@ struct SnippetListView: View {
                     showingPlayer = true
                 }
                 .swipeActions(edge: .leading) {
-                    Button("编辑") { editing = snippet }.tint(.blue)
+                    Button(L10n.text(.edit)) { editing = snippet }.tint(.blue)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(L10n.text(.delete), role: .destructive) {
+                        delete(at: IndexSet(integer: index))
+                    }
                 }
                 .contextMenu {
-                    Button("编辑片段") { editing = snippet }
-                    Button("重置播放次数", systemImage: "arrow.counterclockwise", role: .destructive) {
+                    Button(L10n.text(.editSnippet)) { editing = snippet }
+                    Button(L10n.text(.resetCount), systemImage: "arrow.counterclockwise", role: .destructive) {
                         resetting = snippet
                     }
                 }
             }
-            .onDelete(perform: delete)
         }
     }
 
@@ -100,7 +107,7 @@ struct SnippetListView: View {
         } catch {
             snippet.playCount = previousCount
             snippet.lastPlayedAt = previousDate
-            storageError = error.localizedDescription
+            storageError = L10n.Message(error: error)
         }
     }
 
@@ -112,43 +119,48 @@ struct SnippetListView: View {
             try context.save()
             for id in deletedIDs {
                 do { try playback.removeAudio(id: id) }
-                catch { storageError = "片段已删除，但音频文件清理失败：\(error.localizedDescription)" }
+                catch { storageError = L10n.Message(.cleanupError, String(error.localizedDescription)) }
             }
         } catch {
             context.rollback()
-            storageError = error.localizedDescription
+            storageError = L10n.Message(error: error)
         }
     }
 }
 
 /// Value-typed row so SwiftUI can skip redraws when only unrelated playback fields change.
 private struct SnippetRow: View, Equatable {
+    @EnvironmentObject private var language: AppLanguage
     let index: Int
     let title: String
     let text: String
     let playCount: Int
+    let lastPlayedAt: Date?
     let isSelected: Bool
     let isSynthesizing: Bool
     let synthesisError: String?
 
     var body: some View {
+        let _ = language.selection
         HStack(alignment: .top, spacing: 12) {
             Text("\(index)")
                 .font(.subheadline.weight(.semibold).monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
                 .background(Circle().fill(Color.secondary.opacity(0.12)))
-                .accessibilityLabel("第 \(index) 条")
+                .accessibilityLabel(L10n.text(.snippetIndex, String(index)))
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title).font(.headline).foregroundStyle(.primary)
                 Text(text).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
-                if isSynthesizing { ProgressView("正在合成…") }
+                if isSynthesizing { ProgressView(L10n.text(.synthesizing)) }
                 if let synthesisError {
                     Text(synthesisError).font(.caption).foregroundStyle(.orange)
                 }
-                Text("已重复 \(playCount) 遍")
+                Text(L10n.text(.repeatCount, String(playCount)))
                     .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                LastFinishedPlayView(lastPlayedAt: lastPlayedAt)
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
             if isSelected {
@@ -163,6 +175,7 @@ private struct SnippetRow: View, Equatable {
             && lhs.title == rhs.title
             && lhs.text == rhs.text
             && lhs.playCount == rhs.playCount
+            && lhs.lastPlayedAt == rhs.lastPlayedAt
             && lhs.isSelected == rhs.isSelected
             && lhs.isSynthesizing == rhs.isSynthesizing
             && lhs.synthesisError == rhs.synthesisError
@@ -171,22 +184,24 @@ private struct SnippetRow: View, Equatable {
 
 /// Bottom bar only needs selection / play state — kept separate for clearer invalidation scope.
 private struct MiniPlayerBar: View {
+    @EnvironmentObject private var language: AppLanguage
     @EnvironmentObject private var playback: SpeechPlaybackController
     @Binding var showingPlayer: Bool
 
     var body: some View {
+        let _ = language.selection
         if playback.selectedID != nil {
             HStack {
                 Button { showingPlayer = true } label: {
                     VStack(alignment: .leading) {
                         Text(playback.title).lineLimit(1).font(.headline)
-                        Label("单句循环", systemImage: "infinity").font(.caption)
+                        Label(L10n.text(.singleLoop), systemImage: "infinity").font(.caption)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }.buttonStyle(.plain)
                 Button { playback.isPlaying ? playback.pause() : playback.play() } label: {
                     Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
                         .font(.title2).frame(width: 52, height: 52)
-                }.accessibilityLabel(playback.isPlaying ? "暂停" : "播放")
+                }.accessibilityLabel(playback.isPlaying ? L10n.text(.pause) : L10n.text(.play))
             }
             .padding(12).loopGlass().padding(.horizontal).padding(.bottom, 8)
         }

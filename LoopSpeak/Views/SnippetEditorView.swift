@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct SnippetEditorView: View {
+    @EnvironmentObject private var language: AppLanguage
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var playback: SpeechPlaybackController
@@ -10,7 +11,7 @@ struct SnippetEditorView: View {
     @State private var text: String
     @State private var saving = false
     @State private var saved = false
-    @State private var saveError: String?
+    @State private var saveError: L10n.Message?
 
     init(snippet: Snippet? = nil) {
         self.snippet = snippet
@@ -19,28 +20,29 @@ struct SnippetEditorView: View {
     }
 
     var body: some View {
+        let _ = language.selection
         NavigationStack {
             Form {
-                Section("标题（可选）") { TextField("例如：自我介绍", text: $title) }
-                Section("英语内容") {
+                Section(L10n.text(.optionalTitle)) { TextField(L10n.text(.titleExample), text: $title) }
+                Section(L10n.text(.englishContent)) {
                     TextEditor(text: $text)
                         .frame(minHeight: 240)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.sentences)
-                        .accessibilityLabel("英语片段内容")
+                        .accessibilityLabel(L10n.text(.contentAccessibility))
                 }
-                Section { Text("保存后点击播放。当前片段将无限循环，直到暂停或停止。") }
-                if saving { Section { ProgressView("正在合成语音…") } }
-                if saved { Section { Button("完成") { dismiss() } } }
-                if let saveError { Section { Text(saveError).foregroundStyle(.red) } }
+                Section { Text(L10n.text(.saveHint)) }
+                if saving { Section { ProgressView(L10n.text(.synthesizingSpeech)) } }
+                if saved { Section { Button(L10n.text(.done)) { dismiss() } } }
+                if let saveError { Section { Text(saveError.string).foregroundStyle(.red) } }
             }
             .disabled(saving)
             .interactiveDismissDisabled(saving)
-            .navigationTitle(snippet == nil ? "添加片段" : "编辑片段")
+            .navigationTitle(snippet == nil ? L10n.text(.addSnippet) : L10n.text(.editSnippet))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
+                ToolbarItem(placement: .cancellationAction) { Button(L10n.text(.cancel)) { dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存", action: save)
+                    Button(L10n.text(.save), action: save)
                         .disabled(saving || saved || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -71,7 +73,7 @@ struct SnippetEditorView: View {
             }
         } catch {
             context.rollback()
-            saveError = "保存失败：\(error.localizedDescription)"
+            saveError = L10n.Message(.saveError, String(error.localizedDescription))
         }
     }
 }

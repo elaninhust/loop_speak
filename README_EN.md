@@ -4,7 +4,7 @@
 
 **Version 1.0** · Infinite single-sentence English practice for iOS
 
-LoopSpeak is an iPhone app for English speaking drills: save a sentence (or short passage) as a snippet, synthesize it once with Volcengine **Doubao TTS** into an MP3, then loop that clip locally forever. The UI is Chinese, built with **iOS 26 / SwiftUI**, and keeps Liquid Glass controls.
+LoopSpeak is an iPhone app for English speaking drills: save a sentence (or short passage) as a snippet, synthesize it once with Volcengine **Doubao TTS** into an MP3, then loop that clip locally forever. Built with **iOS 26 / SwiftUI** and Liquid Glass controls; the UI supports **Follow System / 简体中文 / English**, independent of speech language.
 
 If Doubao credentials are missing, offline synthesis fails, or the cache is unavailable, playback falls back to **Apple system English voices**. Saving and synthesis never auto-start playback—you tap Play manually.
 
@@ -16,9 +16,9 @@ If Doubao credentials are missing, offline synthesis fails, or the cache is unav
 |:---:|:---:|:---:|
 | ![Home](docs/screenshots/01-home-empty.png) | ![Add snippet](docs/screenshots/02-add-snippet.png) | ![Voice settings](docs/screenshots/03-voice-settings.png) |
 
-- **Home**: App title, Settings and Add; banner when Doubao is not configured (system voice fallback) and guidance to add English snippets.
+- **Home**: App title, Settings and Add; list shows repeat count and “Last full play” relative time; banner when Doubao is not configured (system voice fallback).
 - **Add snippet**: Optional title + English body; after save, tap Play—the current snippet loops until pause or stop.
-- **Voice settings**: API Key / Resource Id, preset or custom speaker; credentials stay in Keychain; test synthesis and resynthesize-all actions.
+- **Voice settings**: UI language, API Key / Resource Id, preset or custom speaker; credentials stay in Keychain; test synthesis and resynthesize-all actions.
 
 ---
 
@@ -27,12 +27,13 @@ If Doubao credentials are missing, offline synthesis fails, or the cache is unav
 | Feature | Description |
 |---------|-------------|
 | Snippet management | Add / edit / delete English body text and optional titles; SwiftData local persistence |
+| UI language | Follow System / 简体中文 / English in Settings; applies immediately; does not change snippet text or TTS speech language |
 | Cloud synthesis | Doubao V3 HTTP unidirectional streaming TTS → MP3 (24 kHz) on disk |
 | Local looping | Same sentence loops forever; play count increments only after a full pass |
 | System fallback | `AVSpeechSynthesizer` when credentials, cache, or files are missing/broken |
 | Background & lock screen | `UIBackgroundModes = audio`; lock screen and headphone remote controls |
 | Scrubbing | Seek on Doubao-cached audio; system TTS is not seekable |
-| Stats | Cumulative play count and last-played time; long-press to reset |
+| Stats | Cumulative play count and “Last full play” relative time (list + now playing); long-press to reset |
 | Credential safety | API Key and related settings live in Keychain only—not UserDefaults or logs |
 
 ---
@@ -71,6 +72,7 @@ Path: **Settings** (top-left)
 
 | Field | Notes |
 |-------|--------|
+| UI language | Follow System / 简体中文 / English; UI only—snippet content and speech stay English |
 | API Key | Console API Key |
 | Resource Id | Default `seed-tts-2.0`; `seed-icl-2.0` is also allowed if provisioned and matched to the voice |
 | Preset voice | Default **Michael (male)** / `en_male_michael_uranus_bigtts` |
@@ -118,6 +120,7 @@ Old Access Tokens are **not reused**. An empty API Key shows a prompt to switch 
 - Pause / stop mid-pass **do not count**; resume and finish a full pass counts as **1**.
 - System-voice fallback counts the same way on utterance completion.
 - No playlist advancement—always one-sentence loops.
+- List and now-playing show **Last full play**: never-finished copy when unset; localized relative time within seven days; relative + absolute date/time when older.
 
 ### Cache and offline
 
@@ -147,17 +150,20 @@ Tip: on iPhone go to **Settings → Accessibility → Spoken Content → Voices 
 loop_speak/
 ├── LoopSpeak.xcodeproj
 ├── LoopSpeak/
-│   ├── App/LoopSpeakApp.swift          # Entry; SwiftData + playback controller
+│   ├── App/
+│   │   ├── LoopSpeakApp.swift          # Entry; SwiftData + playback + UI language
+│   │   └── L10n.swift                  # Bilingual UI strings, language preference, deferred messages
 │   ├── Models/Snippet.swift            # Snippet model
 │   ├── TTS/DoubaoTTS.swift             # Config, Keychain, V3 synthesis, audio cache
 │   ├── Playback/
 │   │   ├── SpeechPlaybackController.swift  # Playback, synthesis coordination, lock screen, remotes
 │   │   └── VoiceSelector.swift             # Preferred system English voice
 │   ├── Views/
-│   │   ├── SnippetListView.swift       # List + mini player
+│   │   ├── SnippetListView.swift       # List + mini player + last full play
 │   │   ├── SnippetEditorView.swift     # Add / edit
 │   │   ├── NowPlayingView.swift        # Player + seek
-│   │   ├── TTSSettingsView.swift       # Credentials and batch synthesis
+│   │   ├── LastFinishedPlayView.swift  # Last-full-play relative timestamp
+│   │   ├── TTSSettingsView.swift       # UI language, credentials, batch synthesis
 │   │   └── GlassPanel.swift            # Liquid Glass helpers
 │   └── Resources/                      # Info.plist, Assets, icons
 ├── docs/screenshots/                   # README UI screenshots
@@ -167,6 +173,7 @@ loop_speak/
 ### Module responsibilities
 
 - **`Snippet`**: text, title, audio relative path / content hash, play count, last played; new fields have defaults for lightweight migration.
+- **`L10n` / `AppLanguage`**: UI language preference (`UserDefaults` key `LoopSpeak.uiLanguage`); switching refreshes navigation, banners, errors, and lock-screen copy immediately; **does not** affect snippet body text, Doubao request fields, or system English speech language.
 - **`DoubaoTTS`**: dedicated `actor` for V3 requests; parses a single JSON object, NDJSON, or adjacent JSON objects; concatenates non-empty base64 audio where `code == 0`; `code == 20000000` means successful end-of-stream (not a failure).
 - **`SpeechPlaybackController`**: `MainActor` playback and async synthesis; full-pass counting; interruptions never auto-resume; `PlaybackProgress` is observed separately so list views are not redrawn at 4 Hz.
 - **`AudioCache`**: hashing and atomic file writes; clears old metadata before replacing the file so a failed save cannot leave an old hash pointing at new audio.
@@ -216,6 +223,8 @@ This test is **not** part of the App target.
 - [ ] After delete, the matching MP3 is gone; no ghost loops
 - [ ] Pause / resume / stop / counts / reset / persistence behave correctly; lock screen and background can loop for minutes; AirPods and remotes stay in sync
 - [ ] Calls, Siri, headphone unplug, and output switches **never auto-resume**
+- [ ] UI language: Follow System / Chinese / English switches instantly; snippet text and TTS stay English; banners and errors refresh with the language
+- [ ] Last full play: never-finished / relative within seven days / relative + absolute when older; reset returns to never finished
 - [ ] Dynamic Type, Dark Mode, VoiceOver, glass controls, and error UI remain usable
 
 > The Simulator is not a substitute for device checks of background audio and headphones.
