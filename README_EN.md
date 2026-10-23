@@ -10,6 +10,18 @@ If Doubao credentials are missing, offline synthesis fails, or the cache is unav
 
 ---
 
+## Screenshots
+
+| Home (empty state) | Add snippet | Voice settings |
+|:---:|:---:|:---:|
+| ![Home](docs/screenshots/01-home-empty.png) | ![Add snippet](docs/screenshots/02-add-snippet.png) | ![Voice settings](docs/screenshots/03-voice-settings.png) |
+
+- **Home**: App title, Settings and Add; banner when Doubao is not configured (system voice fallback) and guidance to add English snippets.
+- **Add snippet**: Optional title + English body; after save, tap Play—the current snippet loops until pause or stop.
+- **Voice settings**: API Key / Resource Id, preset or custom speaker; credentials stay in Keychain; test synthesis and resynthesize-all actions.
+
+---
+
 ## Features
 
 | Feature | Description |
@@ -148,6 +160,7 @@ loop_speak/
 │   │   ├── TTSSettingsView.swift       # Credentials and batch synthesis
 │   │   └── GlassPanel.swift            # Liquid Glass helpers
 │   └── Resources/                      # Info.plist, Assets, icons
+├── docs/screenshots/                   # README UI screenshots
 └── Tests/test_tts.py                   # Offline config-migration and response-parser tests
 ```
 

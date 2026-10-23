@@ -10,6 +10,18 @@ LoopSpeak 是一款面向英语口语跟读的 iPhone 应用：把一句（或�
 
 ---
 
+## 界面预览
+
+| 主界面（空状态） | 添加片段 | 语音设置 |
+|:---:|:---:|:---:|
+| ![主界面](docs/screenshots/01-home-empty.png) | ![添加片段](docs/screenshots/02-add-snippet.png) | ![语音设置](docs/screenshots/03-voice-settings.png) |
+
+- **主界面**：标题、设置与添加入口；未配置豆包时提示使用系统语音，并引导添加英语片段。
+- **添加片段**：可选标题 + 英语正文；保存后手动播放，当前片段无限循环直至暂停或停止。
+- **语音设置**：API Key / Resource Id、预设或自定义音色；凭据仅存钥匙串，可测试合成与批量重合成。
+
+---
+
 ## 功能概览
 
 | 能力 | 说明 |
@@ -148,6 +160,7 @@ loop_speak/
 │   │   ├── TTSSettingsView.swift       # 凭据与批量合成
 │   │   └── GlassPanel.swift            # Liquid Glass 控件
 │   └── Resources/                      # Info.plist、Assets、图标
+├── docs/screenshots/                   # README 界面预览截图
 └── Tests/test_tts.py                   # 配置迁移与响应解析离线测试
 ```
 
