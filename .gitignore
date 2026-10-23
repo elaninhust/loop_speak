@@ -1,0 +1,68 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Xcode — user-specific (contains local UI state, breakpoints, username)
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+*.hmap
+
+# Xcode — build products
+build/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Package Manager
+.build/
+.swiftpm/configuration/
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+Packages/
+Package.resolved
+
+# CocoaPods / Carthage (if added later)
+Pods/
+Carthage/Build/
+Carthage/Checkouts/
+
+# Secrets & local env (never commit API keys or tokens)
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.mobileprovision
+Secrets/
+secrets/
+Credentials/
+**/GoogleService-Info.plist
+**/AuthKey_*.p8
+
+# Fastlane (local)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Icon design drafts (final App Icon is in Assets.xcassets)
+LoopSpeak/Resources/AppIconCandidates/
+
+# Editors / IDE
+.idea/
+*.swp
+*~
+.vscode/
+*.code-workspace
+
+# Cursor / AI local
+.cursor/
